@@ -639,8 +639,13 @@ Describe "Failover-GcSqlInstance" {
     # failover cannot be easily/quickly instantiated like those in other tests.
     $instance = "test0"
 
-    $numFailoverOps = (Get-GcSqlOperation -Instance $instance | where { $_.OperationType -eq "FAILOVER" }).Count - 2
+    $numFailoverOps = (Get-GcSqlOperation -Instance $instance | where { $_.OperationType -eq "FAILOVER" }).Count
+
     <#
+    The following tests are flaky in that they can take an extremely long time to run (up to several hours) in some cases. 
+    Occasionally, there have also been "Unknown Errors."
+    They are thus commented out as per Jim's advice. 
+
     It "should failover a test instance" {
         Failover-GcSqlInstance $instance
 
@@ -658,7 +663,7 @@ Describe "Failover-GcSqlInstance" {
         $operations[0].Status | Should Match "DONE"
         $operations[0].Error | Should Match ""
      }
-    #>
+    
     It "should failover a pipelined instance (instance and default projects differ)" {
         $nonDefaultProject = "asdf"
         $defaultProject = "gcloud-powershell-testing"
@@ -687,18 +692,13 @@ Describe "Failover-GcSqlInstance" {
         $operations[0].Status | Should Match "DONE"
         $operations[0].Error | Should Match ""
     }
+    #>
 
     It "should fail to failover a test instance with an incorrect settings version specified" {
         $wrongSettingsVersion = (Get-GcSqlInstance -Name $instance).Settings.SettingsVersion + 50
 
-        $failoverCmd = Failover-GcSqlInstance $instance -SettingsVersion $wrongSettingsVersion
-        $failoverCmd | Should Throw "412"
-        $failoverCmd | Should Throw "Input or retrieved settings version does not match current settings version for this instance."
-
-        $operations = Get-GcSqlOperation -Instance $instance | where { $_.OperationType -eq "FAILOVER" }
-        $operations.Count | Should Be ($numFailoverOps + 5)
-        $operations[0].Status | Should Match "DONE"
-        $operations[0].Error | Should Match ""
+        { Failover-GcSqlInstance $instance -SettingsVersion $wrongSettingsVersion } | Should Throw "412"
+        { Failover-GcSqlInstance $instance -SettingsVersion $wrongSettingsVersion } | Should Throw "Input or retrieved settings version does not match current settings version for this instance."
     }
 }
 
