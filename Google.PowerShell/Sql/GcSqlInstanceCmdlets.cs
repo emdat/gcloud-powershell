@@ -1426,12 +1426,12 @@ namespace Google.PowerShell.Sql
 
         private class ErrorCodes
         {
-            public const int InvalidSettingsVersion = 412; 
+            public const int InvalidSettingsVersion = 412;
         }
 
         private class ErrorMessages
         {
-            public const string InvalidSettingsVersion = 
+            public const string InvalidSettingsVersion =
                 "Input or retrieved settings version does not match current settings version for this instance.";
         }
 
@@ -1490,22 +1490,18 @@ namespace Google.PowerShell.Sql
                     throw UnknownParameterSetException;
             }
 
-            if (SettingsVersion == null)
-            {
-                InstancesResource.GetRequest instanceGetRequest = Service.Instances.Get(projectName, instanceName);
-                DatabaseInstance instanceGetResponse = instanceGetRequest.Execute();
-                SettingsVersion = instanceGetResponse.Settings.SettingsVersion;
-            }
+            InstancesResource.GetRequest instanceGetRequest = Service.Instances.Get(projectName, instanceName);
+            DatabaseInstance instanceGetResponse = instanceGetRequest.Execute();
 
             InstancesFailoverRequest failoverRequestBody = new InstancesFailoverRequest
             {
                 FailoverContext = new FailoverContext
                 {
-                    SettingsVersion = SettingsVersion
+                    SettingsVersion = SettingsVersion ?? instanceGetResponse.Settings.SettingsVersion
                 }
             };
 
-            InstancesResource.FailoverRequest failoverRequest = 
+            InstancesResource.FailoverRequest failoverRequest =
                 Service.Instances.Failover(failoverRequestBody, projectName, instanceName);
             Operation failoverResponse;
             try
@@ -1516,13 +1512,35 @@ namespace Google.PowerShell.Sql
             {
                 if (failoverEx.Error.Code == ErrorCodes.InvalidSettingsVersion)
                 {
-                    throw new GoogleApiException("Google Cloud SQL API", failoverEx.Message + 
+                    throw new GoogleApiException("Google Cloud SQL API", failoverEx.Message +
                                                  ErrorMessages.InvalidSettingsVersion);
                 }
 
                 throw failoverEx;
             }
             WaitForSqlOperation(failoverResponse);
+
+            // Wait for recreate operation in failover replica.
+            OperationsResource.ListRequest opListRequest = 
+                Service.Operations.List(projectName, instanceGetResponse.FailoverReplica.Name);
+            do
+            {
+                OperationsListResponse opListResponse = opListRequest.Execute();
+                if (opListResponse.Items == null)
+                {
+                    return;
+                }
+                foreach (Operation operation in opListResponse.Items)
+                {
+                    if (operation.OperationType == "RECREATE_REPLICA")
+                    {
+                        WaitForSqlOperation(operation);
+                        return;
+                    }
+                }
+                opListRequest.PageToken = opListResponse.NextPageToken;
+            }
+            while (opListRequest.PageToken != null);
         }
     }
 }
