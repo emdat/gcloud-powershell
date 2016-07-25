@@ -54,6 +54,11 @@ namespace Google.PowerShell.Sql
                         delay = 5000;
                         break;
                     }
+                case "BACKUP_VOLUME":
+                    {
+                        delay = 2000;
+                        break; 
+                    }
                 default:
                     {
                         delay = 150;
